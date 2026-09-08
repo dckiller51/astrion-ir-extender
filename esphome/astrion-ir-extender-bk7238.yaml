@@ -7,7 +7,7 @@ esphome:
   friendly_name: "${friendly_name}"
 
 # LibreTiny for the BK7238 / T1-3S module
-libretiny:
+bk72xx:
   board: t1_3s
   framework: arduino
 
