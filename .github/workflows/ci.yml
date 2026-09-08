@@ -25,4 +25,6 @@ jobs:
         run: pip install esphome
 
       - name: Validate config
-        run: esphome config esphome/astrion-ir-extender.yaml
+        run: |
+          esphome config esphome/astrion-ir-extender-bk7238.yaml
+          esphome config esphome/astrion-ir-extender-esp8285.yaml
