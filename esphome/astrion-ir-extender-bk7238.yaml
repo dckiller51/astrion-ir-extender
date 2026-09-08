@@ -8,8 +8,7 @@ esphome:
 
 # LibreTiny for the BK7238 / T1-3S module
 bk72xx:
-  board: t1_3s
-  framework: arduino
+  board: t1-3s
 
 logger:
 
