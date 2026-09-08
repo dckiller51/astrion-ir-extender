@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Compile firmware
+        run: esphome compile esphome/astrion-ir-extender.yaml
+
+      - name: Locate compiled binary
+        id: locate
+        run: |
+          # Exact output path has shifted between ESPHome versions before,
+          # so search for it instead of hardcoding one -- see the note in
+          # README.md's "Option C" about this same uncertainty.
+          bin_path=$(find esphome/.esphome/build -name "firmware.bin" | head -n 1)
+          if [ -z "$bin_path" ]; then
+            echo "::error::No firmware.bin found under esphome/.esphome/build -- ESPHome's output layout may have changed, update this workflow."
+            exit 1
+          fi
+          echo "Found: $bin_path"
+          cp "$bin_path" astrion-ir-extender.bin
+          echo "bin_path=astrion-ir-extender.bin" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.locate.outputs.bin_path }}
+          generate_release_notes: true
+          body: |
+            Flash `astrion-ir-extender.bin` via <https://web.esphome.io> — see the
+            [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README.

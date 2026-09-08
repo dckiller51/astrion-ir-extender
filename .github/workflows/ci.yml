@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "esphome/**"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "esphome/**"
+      - ".github/workflows/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Validate config
+        run: esphome config esphome/astrion-ir-extender.yaml
