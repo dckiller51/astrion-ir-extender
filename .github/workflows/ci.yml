@@ -22,7 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install ESPHome
-        run: pip install esphome
+        run: pip install esphome==2026.8.1
 
       - name: Validate config
         run: |
