@@ -103,11 +103,7 @@ binary_sensor:
       # T1-3S modules usually map physical buttons to P24 or P26.
       number: P24 
       inverted: true
-      mode: INPUT_PULLUP
-																	   
-																	
-																		
-																	   
+      mode: INPUT_PULLUP									   
     name: "${friendly_name} Button"
     on_multi_click:
       - timing:
