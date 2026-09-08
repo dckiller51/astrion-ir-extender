@@ -5,9 +5,9 @@ A network-connected, transmit-only infrared blaster for
 Place one inside a closed cabinet, behind a TV, anywhere your remote's own
 built-in IR blaster can't reach in a straight line — the app sends the
 command over WiFi instead, and the extender fires the real IR signal from
-wherever you've put it.
+whatever location you choose.
 
-**Fully standalone.** No Home Assistant, no cloud, no account. One generic
+**Fully standalone.** No Home Assistant, no cloud, no account required. Generic
 firmware, flashed once, works for every user — the app talks to it directly
 over your local network.
 
@@ -15,145 +15,102 @@ over your local network.
 > firmware side; the "Devices" screen that discovers and registers
 > extenders in the app itself hasn't shipped yet.
 
-## Hardware
+## Hardware Options
 
-Any ESP8285-based WiFi IR blaster module (the generic kind commonly sold
-as "Tasmota IR remote" on AliExpress/Amazon) — the same hardware family
-already validated for
-[astrion-ir-sniffer](https://github.com/dckiller51/astrion-ir-sniffer).
+This project officially supports two low-cost hardware architectures:
+
+1. **ESP8285 / ESP8266 Version:** Generic "Tasmota IR remote" modules commonly sold on AliExpress/Amazon.
+2. **Beken BK7238 (T1-3S) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
 
 ## Flashing
 
-**Quick install (recommended — no Docker, no ESPHome install):**
+### Option 1: ESP8285 Version (`.bin`) — Quick Web Install (Recommended)
 
-1. Download the latest `.bin` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
-2. Connect the module to your computer via USB.
-3. Open <https://web.esphome.io> in Chrome or Edge (WebSerial support
-   required), click **Connect**, select the serial port.
-4. Choose to install from a local file, and pick the `.bin` you downloaded
-   (not "Prepare for first use" — that installs ESPHome's own generic
-   firmware, not this project's).
+1. Download the latest `astrion-ir-extender-esp8285.bin` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
+2. Connect your ESP module to your computer via USB.
+3. Open <https://web.esphome.io> in a WebSerial-compatible browser (Chrome or Edge).
+4. Click **Connect**, select your serial port, choose to install from a local file, and select the `.bin` you downloaded.
 
-That's it — no yaml, no compiling, nothing else to install.
+### Option 2: BK7238 / T1-3S Version (`.uf2`) — Wired Serial UART
 
-## Building from source (only if you want to modify the yaml)
+Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools:
 
-`web.esphome.io` on its own can't compile a custom yaml like this one — it
-only flashes an already-built `.bin`, which is exactly what the Quick
-install section above uses. These options are only needed if you're
-changing `esphome/astrion-ir-extender.yaml` yourself (a different GPIO
-pinout, extra sensors, etc.) and need to produce your own `.bin`.
+1. Download `astrion-ir-extender-bk7238.uf2` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
+2. Open the device casing and solder wires to `3V3`, `GND`, `RX1`, and `TX1` on the T1-3S module. Connect them to a USB-to-UART adapter.
+3. Install and run **ltchiptool** (GUI or CLI):
 
-**Option A — ESPHome Dashboard (works well on Windows):**
+   ```bash
+   pip install ltchiptool
+   ltchiptool flash write -d /dev/ttyUSB0 -b bk7238 astrion-ir-extender-bk7238.uf2
+   ```
 
-Compiles inside the Docker container, but the actual USB flash step
-happens through your browser's WebSerial connection straight to the
-device, so Docker never needs direct access to the serial port (the usual
-pain point passing USB devices into Docker Desktop on Windows).
+4. Momentarily ground the `CEN` pin (or power-cycle the module) right as the tool initializes to trigger the Beken serial bootloader.
 
-```bash
-docker run --rm -it -p 6052:6052 -v "${PWD}/esphome:/config" esphome/esphome
-```
+*Note: If your BK7238 device is already running an older version of LibreTiny firmware, you can skip the wires and upload the `.uf2` file directly via its existing OTA web dashboard interface.*
 
-Then, in Chrome or Edge:
+## Building from source (Modifying the YAML)
 
-1. Open <http://localhost:6052>.
-2. `astrion-ir-extender.yaml` shows up automatically (it's in the mounted
-   `esphome/` folder).
-3. Click **Install** → **Plug into this computer** → pick the serial port.
+If you are changing the GPIO pinout or adding extra components, you must compile the firmware manually using Docker to output your own binaries.
 
-**Option B — ESPHome CLI, compile + flash in one command:**
+**Option A — ESPHome Dashboard (Universal):**
 
-Only works smoothly if Docker actually has access to the serial device —
-reliable on Linux, often flaky through Docker Desktop on Windows (prefer
-Option A there).
+Runs an interactive local server. Compiles inside the Docker container, while the actual USB flash step for ESP devices can happen through your browser via WebSerial.
 
 ```bash
-docker run --rm -it -v "${PWD}/esphome":/config -v /dev/ttyUSB0:/dev/ttyUSB0 --device=/dev/ttyUSB0 esphome/esphome run astrion-ir-extender.yaml
+docker run --rm -it -p 6052:6052 -v "\${PWD}/esphome:/config" esphome/esphome
 ```
 
-Adjust `/dev/ttyUSB0` to whatever serial port your module enumerates as.
+1. Open <http://localhost:6052> in Chrome/Edge.
+2. Both `astrion-ir-extender-esp8285.yaml` and `astrion-ir-extender-bk7238.yaml` will be visible.
+3. Click **Install** next to your chosen device configuration.
 
-**Option C — compile only, then flash via web.esphome.io:**
+**Option B — CLI Compilation Only:**
 
 ```bash
-docker run --rm -v "${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender.yaml
+# To compile for ESP8285:
+docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-esp8285.yaml
+
+# To compile for Beken BK7238:
+docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-bk7238.yaml
 ```
 
-The resulting `.bin` lands under
-`esphome/.esphome/build/astrion-ir-extender/.pioenvs/astrion-ir-extender/`
-(exact path can shift between ESPHome versions — if it's not there, search
-for `firmware.bin` under `esphome/.esphome/build/`). Flash it the same way
-as the Quick install section above.
+* The ESP8285 build generates `firmware.bin` under `esphome/.esphome/build/astrion-ir-extender-esp8285/`.
+* The Beken BK7238 build generates `firmware.uf2` under `esphome/.esphome/build/astrion-ir-extender-bk7238/`.
 
 ## First boot — WiFi setup
 
-The firmware ships with no network credentials baked in (it's one generic
-binary for everyone), so on first boot — or any time it can't reach the
-last network it knew — it opens its own temporary hotspot instead:
+The firmware ships with no network credentials baked in. On first boot (or if your local network becomes unreachable), the device creates a temporary provisioning hotspot:
 
-1. On your phone/computer's WiFi settings, connect to **`Astrion IR
-   Extender Setup`** (password `astrion1234`).
-2. A setup page should open automatically (captive portal); if not, open
-   <http://192.168.4.1> yourself.
-3. Enter your real WiFi network's name and password.
-4. The extender reboots and joins your network. Reconnect your phone/
-   computer to your normal WiFi.
+1. Connect your phone or computer to the WiFi network named **`Astrion IR Extender Setup`**.
+2. A captive portal page should open automatically. If it doesn't, navigate to <http://192.168.4.1>.
+3. Enter your local WiFi SSID and password.
+4. The extender will reboot and connect to your home network.
 
-> The hotspot's name and password are the same on every unit. Fine for a
-> single extender, but if you're setting up more than one at the same
-> time on the same network, you currently can't tell them apart during
-> this step — see [Known limitations](#known-limitations).
+> **Multi-Unit Deployment:** ESPHome automatically appends a short, unique device MAC identifier to the hotspot name (e.g., `Astrion IR Extender Setup-a1b2c3`) if multiple units are powered on at the same time. This prevents naming collisions and lets you configure multiple devices simultaneously.
 
-## Finding it again afterwards
+## API Integration & Testing
 
-Once it's joined your real network, the extender advertises itself over
-mDNS (`astrion-ir-extender.local`) like any ESPHome device, and exposes:
+Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7238.local`) and exposes the following plain HTTP REST endpoints:
 
-- `GET /text_sensor/astrion_ir_extender_mac_address` — its MAC address,
-  for manually registering it in the app if network discovery doesn't
-  find it automatically (blocked multicast, VLANs, etc).
-- `GET /text_sensor/astrion_ir_extender_ip_address` — its current IP.
-- `POST /text/pronto_trigger/set?value=<pronto hex code>` — fires that
-  Pronto code out the IR LED immediately. This is the endpoint the app
-  will call to actually transmit a command once the "Devices"/extender
-  support lands.
+*-* `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
 
-You can try that last one by hand right now with `curl` to confirm the IR
-transmitter itself works, before any app-side support exists:
+* `GET /text_sensor/<device_name>_ip_address` — Reads the local IP address.
+* `POST /text/pronto_trigger/set?value=<pronto hex code>` — Immediately fires the Pronto hex string out of the IR LED hardware.
+
+You can test the IR transmission manually using `curl`:
 
 ```bash
-curl -X POST "http://astrion-ir-extender.local/text/pronto_trigger/set?value=0000%20006D%200027%200000%20..."
+curl -X POST "http://astrion-ir-extender-bk7238.local..."
 ```
 
-(URL-encode the spaces in the Pronto code as `%20`, or quote/encode the
-whole value depending on your shell.)
+*(Ensure all spaces inside the Pronto hex code are URL-encoded as `%20`)*.
 
 ## Factory reset
 
-Press and hold the onboard button for 5 seconds. This erases all stored
-settings, including the saved WiFi credentials, and puts the extender back
-into setup-hotspot mode — use this if you're moving it to a different
-network, or if it ever gets stuck unable to reconnect.
-
-## Known limitations
-
-- **Multiple units, same setup hotspot name/password.** Onboarding two or
-  more extenders around the same time is ambiguous right now — no way to
-  tell one temporary hotspot from another. Needs a real fix (e.g. a
-  MAC-derived suffix) before this is recommended for multi-unit setups.
-- **GPIO pin assumptions not yet hardware-verified**: the physical
-  button (GPIO0) and status LED (GPIO13) pins are carried over from
-  `astrion-ir-sniffer.yaml`'s pinout for the same module family, but
-  haven't been individually confirmed working on this specific firmware
-  yet. The IR transmitter pin (GPIO4) *is* already confirmed, since it's
-  the same one already validated by the sniffer project.
-- **No app-side support yet.** Registering an extender, mDNS discovery,
-  and choosing "local vs this extender" per IR device in Astrion Custom
-  Dashboard are all still on the roadmap, not shipped.
+Press and hold the physical button on the module for 5 seconds. This completely erases all stored runtime configurations (including saved WiFi credentials) and drops the device back into captive-portal onboarding mode.
 
 ## Related projects
 
-- [Astrion Custom Dashboard (Android app / APK)](https://github.com/dckiller51/astrion-custom-dashboard)
-- [Astrion IR Sniffer (capture tool / IR database)](https://github.com/dckiller51/astrion-ir-sniffer)
-- [HA Astrion Custom Dashboard (Home Assistant custom component)](https://github.com/dckiller51/ha-astrion-custom-dashboard)
+* [Astrion Custom Dashboard (Android app / APK)](https://github.com/dckiller51/astrion-custom-dashboard)
+* [Astrion IR Sniffer (capture tool / IR database)](https://github.com/dckiller51/astrion-ir-sniffer)
+* [HA Astrion Custom Dashboard (Home Assistant custom component)](https://github.com/dckiller51/ha-astrion-custom-dashboard)

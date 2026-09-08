@@ -11,6 +11,13 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - suffix: "esp8285"
+            ext: "bin"
+          - suffix: "bk7238"
+            ext: "uf2" # LibreTiny generates a compiled image package in .uf2 format
     steps:
       - uses: actions/checkout@v4
 
@@ -22,28 +29,53 @@ jobs:
         run: pip install esphome
 
       - name: Compile firmware
-        run: esphome compile esphome/astrion-ir-extender.yaml
+        run: esphome compile esphome/astrion-ir-extender-${{ matrix.suffix }}.yaml
 
       - name: Locate compiled binary
         id: locate
         run: |
-          # Exact output path has shifted between ESPHome versions before,
-          # so search for it instead of hardcoding one -- see the note in
-          # README.md's "Option C" about this same uncertainty.
-          bin_path=$(find esphome/.esphome/build -name "firmware.bin" | head -n 1)
+          # Dynamic search based on the platform-specific extension (.bin or .uf2)
+          bin_path=$(find esphome/.esphome/build -name "firmware.${{ matrix.ext }}" | head -n 1)
+          
           if [ -z "$bin_path" ]; then
-            echo "::error::No firmware.bin found under esphome/.esphome/build -- ESPHome's output layout may have changed, update this workflow."
+            echo "::error::No firmware.${{ matrix.ext }} found under esphome/.esphome/build"
             exit 1
           fi
+          
           echo "Found: $bin_path"
-          cp "$bin_path" astrion-ir-extender.bin
-          echo "bin_path=astrion-ir-extender.bin" >> "$GITHUB_OUTPUT"
+          output_name="astrion-ir-extender-${{ matrix.suffix }}.${{ matrix.ext }}"
+          cp "$bin_path" "$output_name"
+          
+          # Pass filename output to the next steps
+          echo "bin_path=$output_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Artifacts (Temporary)
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.suffix }}
+          path: ${{ steps.locate.outputs.bin_path }}
+
+  publish-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware-artifacts
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.locate.outputs.bin_path }}
+          files: firmware-artifacts/*
           generate_release_notes: true
           body: |
-            Flash `astrion-ir-extender.bin` via <https://web.esphome.io> — see the
-            [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README.
+            ### Installation / Flashing Instructions
+            
+            *   **ESP8285 Version (`.bin`)**: Can be flashed directly from your browser using Chrome or Edge via <https://esphome.io>.
+            *   **BK7238 Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
+
+            Please refer to the [Quick install](https://github.com{{ github.repository }}#flashing) section of the README for detailed instructions.
