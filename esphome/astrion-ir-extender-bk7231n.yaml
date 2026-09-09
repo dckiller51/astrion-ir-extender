@@ -99,7 +99,7 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      # T1-3S modules usually map physical buttons to P24 or P26.
+      # CBU modules usually map physical buttons to P24 or P26.
       number: P24 
       inverted: true
       mode: INPUT_PULLUP
@@ -111,14 +111,14 @@ binary_sensor:
           - button.press: factory_reset_button
 
 status_led:
-  # P6 (PWM0) or P7 (PWM1) are the standard LED pins on T1-3S breakout boards.
+  # P6 (PWM0) or P7 (PWM1) are the standard LED pins on CBU breakout boards.
   pin: 
     number: P6
     inverted: true
 
 remote_transmitter:
   pin:
-    # Ensure your IR hardware emitter is wired to this physical pin on the T1-3S
+    # Ensure your IR hardware emitter is wired to this physical pin on the CBU
     number: P8
   carrier_duty_percent: 50%
 

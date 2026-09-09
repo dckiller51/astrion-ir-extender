@@ -36,7 +36,7 @@ This project officially supports two low-cost hardware architectures:
 Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools:
 
 1. Download `astrion-ir-extender-bk7231n.uf2` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
-2. Open the device casing and solder wires to `3V3`, `GND`, `RX1`, and `TX1` on the T1-3S module. Connect them to a USB-to-UART adapter.
+2. Open the device casing and solder wires to `3V3`, `GND`, `RX1`, and `TX1` on the CBU module. Connect them to a USB-to-UART adapter.
 3. Install and run **ltchiptool** (GUI or CLI):
 
    ```bash
