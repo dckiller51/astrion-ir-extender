@@ -33,18 +33,29 @@ This project officially supports two low-cost hardware architectures:
 
 ### Option 2: BK7231N / CBU Version (`.uf2`) — Wired Serial UART
 
-Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools:
+Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools.
+
+**Wiring:**
+
+Open the device casing and solder (or clip) wires to `3V3`, `GND`, `RX1`, and `TX1` on the CBU module, then connect them to a USB-to-UART adapter (remember to cross RX/TX: module `TX1` → adapter `RX`, module `RX1` → adapter `TX`). Pin locations are on the underside of this specific module:
+
+![BK7231N module, underside — flashing pin locations](docs/beken_bk7231n-bellow.jpg)
+
+![BK7231N module, top side](docs/beken_bk7231n-on_top.jpg)
+
+**Flashing with ltchiptool:**
 
 1. Download `astrion-ir-extender-bk7231n.uf2` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
-2. Open the device casing and solder wires to `3V3`, `GND`, `RX1`, and `TX1` on the CBU module. Connect them to a USB-to-UART adapter.
-3. Install and run **ltchiptool** (GUI or CLI):
+2. Get ltchiptool — on Windows, the standalone executable is the simplest route, no Python/pip needed: download `ltchiptool-vX.Y.Z.exe` from the [ltchiptool releases page](https://github.com/libretiny-eu/ltchiptool/releases) and run it directly. (Cross-platform alternative: `pip install ltchiptool`, then run `ltchiptool` for the same GUI, or use the CLI as below.)
+3. CLI equivalent, if you prefer:
 
    ```bash
-   pip install ltchiptool
    ltchiptool flash write -d /dev/ttyUSB0 -b bk7231n astrion-ir-extender-bk7231n.uf2
    ```
 
-4. Momentarily ground the `CEN` pin (or power-cycle the module) right as the tool initializes to trigger the Beken serial bootloader.
+   (On Windows, `/dev/ttyUSB0` is a `COMx` port instead — check Device Manager.)
+
+4. Start the write in ltchiptool, then **briefly touch/bridge `CEN` to `GND`** right as it begins trying to connect — a quick momentary short, not a sustained connection — to drop the module into its UART bootloader. If it doesn't catch the bootloader window in time, retry the write and the CEN/GND touch together; it sometimes takes a couple of attempts to land the timing.
 
 *Note: If your BK7231N device is already running an older version of LibreTiny firmware, you can skip the wires and upload the `.uf2` file directly via its existing OTA web dashboard interface.*
 

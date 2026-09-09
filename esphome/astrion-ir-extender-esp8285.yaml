@@ -4,6 +4,7 @@ substitutions:
 
 esphome:
   name: "${name}"
+  name_add_mac_suffix: true
   friendly_name: "${friendly_name}"
 
 esp8266:
@@ -132,6 +133,7 @@ text:
     name: "${friendly_name} Pronto Trigger"
     optimistic: true
     mode: text
+    max_length: 2048
     on_value:
       then:
         - logger.log:

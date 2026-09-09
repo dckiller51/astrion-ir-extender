@@ -4,6 +4,7 @@ substitutions:
 
 esphome:
   name: "${name}"
+  name_add_mac_suffix: true
   friendly_name: "${friendly_name}"
 
 # Beken BK7231N / CBU module
@@ -99,8 +100,9 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      # CBU modules usually map physical buttons to P24 or P26.
-      number: P24 
+      # Confirmed via a matching device template ("Btn;0" on pin 6):
+      # P6 is the physical button, not P24 as originally guessed.
+      number: P6
       inverted: true
       mode: INPUT_PULLUP
     name: "${friendly_name} Button"
@@ -111,16 +113,31 @@ binary_sensor:
           - button.press: factory_reset_button
 
 status_led:
-  # P6 (PWM0) or P7 (PWM1) are the standard LED pins on CBU breakout boards.
-  pin: 
-    number: P6
+  # Confirmed via the same template ("WifiLED;1" on pin 8): P8 drives a
+  # WiFi status LED, not an IR transmit array as guessed from physical
+  # inspection -- that guess was wrong, this is the real assignment.
+  pin:
+    number: P8
     inverted: true
 
 remote_transmitter:
   pin:
-    # Ensure your IR hardware emitter is wired to this physical pin on the CBU
-    number: P8
+    # Confirmed via the same template ("IRSend;3" on pin 26) -- neither
+    # P7 nor P8 was actually the transmitter; it's P26. Ignore the earlier
+    # guesses in this file's history, this is the verified one.
+    number: P26
   carrier_duty_percent: 50%
+
+# Bonus, not currently used: the same template shows an IR *receiver* on
+# P7 ("IRRecv;2"). Astrion IR Extender is transmit-only by design (see
+# README), so this is left unconfigured for now -- but if this extender
+# ever grows a learning/capture feature (mirroring astrion-ir-sniffer),
+# P7 is where that would plug in. Uncomment to enable:
+# remote_receiver:
+#   pin:
+#     number: P7
+#     inverted: true
+#   dump: pronto
 
 text:
   - platform: template
@@ -128,6 +145,7 @@ text:
     name: "${friendly_name} Pronto Trigger"
     optimistic: true
     mode: text
+    max_length: 2048
     on_value:
       then:
         - logger.log:
