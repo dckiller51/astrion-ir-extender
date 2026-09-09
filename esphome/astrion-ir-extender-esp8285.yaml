@@ -83,6 +83,32 @@ switch:
   - platform: restart
     name: "${friendly_name} Restart"
 
+globals:
+  - id: pronto_buffer
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+
+text:
+  - platform: template
+    id: pronto_chunk
+    name: "${friendly_name} Pronto Chunk"
+    optimistic: true
+    mode: text
+    max_length: 255 # hard ceiling enforced by ESPHome's text entity schema --
+    # this is why a single POST with a full Pronto code doesn't work: many
+    # real captured codes exceed 255 chars (confirmed: 359+ chars for a
+    # 34-pair burst alone). Long codes must be split into <=255-char
+    # chunks POSTed one at a time to THIS field (each one appends to the
+    # buffer below), then fired via the separate button once complete.
+    on_value:
+      then:
+        - lambda: |-
+            id(pronto_buffer) += x;
+        - logger.log:
+            format: "Pronto chunk appended, buffer is now %d chars"
+            args: [ "id(pronto_buffer).length()" ]
+
 button:
   - platform: factory_reset
     name: "${friendly_name} Factory Reset"
@@ -93,6 +119,21 @@ button:
     # own entity (callable over web_server/API) AND via the physical
     # button below, for when the extender isn't reachable over the
     # network at all anymore.
+
+  - platform: template
+    id: pronto_fire
+    name: "${friendly_name} Pronto Fire"
+    # Call this (POST /button/${name}_pronto_fire/press) after all chunks
+    # have been appended to transmit the accumulated buffer, then clear it
+    # for the next command.
+    on_press:
+      - logger.log:
+          format: "Transmitting Pronto: %s"
+          args: [ "id(pronto_buffer).c_str()" ]
+      - remote_transmitter.transmit_pronto:
+          data: !lambda 'return id(pronto_buffer);'
+      - lambda: |-
+          id(pronto_buffer) = "";
 
 binary_sensor:
   - platform: status
@@ -126,18 +167,3 @@ remote_transmitter:
     # Confirmed working pin: same one already validated by
     # astrion-ir-sniffer's own remote_transmitter.
   carrier_duty_percent: 50%
-
-text:
-  - platform: template
-    id: pronto_trigger
-    name: "${friendly_name} Pronto Trigger"
-    optimistic: true
-    mode: text
-    max_length: 2048
-    on_value:
-      then:
-        - logger.log:
-            format: "Transmitting Pronto: %s"
-            args: [ "x.c_str()" ]
-        - remote_transmitter.transmit_pronto:
-            data: !lambda 'return x.c_str();'

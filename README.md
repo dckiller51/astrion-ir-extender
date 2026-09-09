@@ -103,18 +103,23 @@ The firmware ships with no network credentials baked in. On first boot (or if yo
 
 Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7231n.local`) and exposes the following plain HTTP REST endpoints:
 
-*-* `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
-
+* `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
 * `GET /text_sensor/<device_name>_ip_address` — Reads the local IP address.
-* `POST /text/pronto_trigger/set?value=<pronto hex code>` — Immediately fires the Pronto hex string out of the IR LED hardware.
+* `POST /text/<device_name>_pronto_chunk/set?value=<chunk>` — Appends `<chunk>` to an internal buffer. **Call this one or more times** to build up a full Pronto code, since ESPHome's `text` entity schema caps a single value at 255 characters — many real captured Pronto codes are longer than that, so long codes need to be split into ≤255-char pieces and sent as separate calls.
+* `POST /button/<device_name>_pronto_fire/press` — Transmits everything accumulated in the buffer out the IR LED, then clears it for the next command. Call this once, after all chunks have been sent.
 
-You can test the IR transmission manually using `curl`:
+**This is a two-step protocol, not a single request** — send the chunk(s) first, then press fire.
+
+You can test the IR transmission manually. If your Pronto code is short enough to fit in one chunk (≤255 chars):
 
 ```bash
-curl -X POST "http://astrion-ir-extender-bk7231n.local..."
+curl -X POST "http://astrion-ir-extender-bk7231n.local/text/astrion_ir_extender_pronto_chunk/set?value=0000%20006D%20..."
+curl -X POST "http://astrion-ir-extender-bk7231n.local/button/astrion_ir_extender_pronto_fire/press"
 ```
 
-*(Ensure all spaces inside the Pronto hex code are URL-encoded as `%20`)*.
+For a longer code, split it into ≤255-char pieces and POST each to the same `pronto_chunk` endpoint before pressing fire — or just open the device's own web UI (`http://<ip>/`) in a browser, which shows the same entities and is easier for one-off manual testing than juggling `curl` calls by hand.
+
+*(Ensure all spaces inside each Pronto chunk are URL-encoded as `%20`.)*
 
 ## Factory reset
 
