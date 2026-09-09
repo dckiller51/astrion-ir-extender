@@ -6,9 +6,9 @@ esphome:
   name: "${name}"
   friendly_name: "${friendly_name}"
 
-# LibreTiny for the BK7238 / T1-3S module
+# Beken BK7231N / CBU module
 bk72xx:
-  board: t1-3s
+  board: cbu
 
 logger:
 

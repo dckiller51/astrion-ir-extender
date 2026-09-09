@@ -16,7 +16,7 @@ jobs:
         include:
           - suffix: "esp8285"
             ext: "bin"
-          - suffix: "bk7238"
+          - suffix: "bk7231n"
             ext: "uf2" # LibreTiny generates a compiled image package in .uf2 format
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +76,6 @@ jobs:
             ### Installation / Flashing Instructions
 
             *   **ESP8285 Version (`.bin`)**: Can be flashed directly from your browser using Chrome or Edge via <https://web.esphome.io>.
-            *   **BK7238 Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
+            *   **BK7231N Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
 
             Please refer to the [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README for detailed instructions.

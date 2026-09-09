@@ -20,7 +20,7 @@ over your local network.
 This project officially supports two low-cost hardware architectures:
 
 1. **ESP8285 / ESP8266 Version:** Generic "Tasmota IR remote" modules commonly sold on AliExpress/Amazon.
-2. **Beken BK7238 (T1-3S) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
+2. **Beken BK7231N (CBU) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
 
 ## Flashing
 
@@ -31,22 +31,22 @@ This project officially supports two low-cost hardware architectures:
 3. Open <https://web.esphome.io> in a WebSerial-compatible browser (Chrome or Edge).
 4. Click **Connect**, select your serial port, choose to install from a local file, and select the `.bin` you downloaded.
 
-### Option 2: BK7238 / T1-3S Version (`.uf2`) — Wired Serial UART
+### Option 2: BK7231N / CBU Version (`.uf2`) — Wired Serial UART
 
 Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools:
 
-1. Download `astrion-ir-extender-bk7238.uf2` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
+1. Download `astrion-ir-extender-bk7231n.uf2` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
 2. Open the device casing and solder wires to `3V3`, `GND`, `RX1`, and `TX1` on the T1-3S module. Connect them to a USB-to-UART adapter.
 3. Install and run **ltchiptool** (GUI or CLI):
 
    ```bash
    pip install ltchiptool
-   ltchiptool flash write -d /dev/ttyUSB0 -b bk7238 astrion-ir-extender-bk7238.uf2
+   ltchiptool flash write -d /dev/ttyUSB0 -b bk7231n astrion-ir-extender-bk7231n.uf2
    ```
 
 4. Momentarily ground the `CEN` pin (or power-cycle the module) right as the tool initializes to trigger the Beken serial bootloader.
 
-*Note: If your BK7238 device is already running an older version of LibreTiny firmware, you can skip the wires and upload the `.uf2` file directly via its existing OTA web dashboard interface.*
+*Note: If your BK7231N device is already running an older version of LibreTiny firmware, you can skip the wires and upload the `.uf2` file directly via its existing OTA web dashboard interface.*
 
 ## Building from source (Modifying the YAML)
 
@@ -61,7 +61,7 @@ docker run --rm -it -p 6052:6052 -v "\${PWD}/esphome:/config" esphome/esphome
 ```
 
 1. Open <http://localhost:6052> in Chrome/Edge.
-2. Both `astrion-ir-extender-esp8285.yaml` and `astrion-ir-extender-bk7238.yaml` will be visible.
+2. Both `astrion-ir-extender-esp8285.yaml` and `astrion-ir-extender-bk7231n.yaml` will be visible.
 3. Click **Install** next to your chosen device configuration.
 
 **Option B — CLI Compilation Only:**
@@ -70,12 +70,12 @@ docker run --rm -it -p 6052:6052 -v "\${PWD}/esphome:/config" esphome/esphome
 # To compile for ESP8285:
 docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-esp8285.yaml
 
-# To compile for Beken BK7238:
-docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-bk7238.yaml
+# To compile for Beken BK7231N:
+docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-bk7231n.yaml
 ```
 
 * The ESP8285 build generates `firmware.bin` under `esphome/.esphome/build/astrion-ir-extender-esp8285/`.
-* The Beken BK7238 build generates `firmware.uf2` under `esphome/.esphome/build/astrion-ir-extender-bk7238/`.
+* The Beken BK7231N build generates `firmware.uf2` under `esphome/.esphome/build/astrion-ir-extender-bk7231n/`.
 
 ## First boot — WiFi setup
 
@@ -90,7 +90,7 @@ The firmware ships with no network credentials baked in. On first boot (or if yo
 
 ## API Integration & Testing
 
-Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7238.local`) and exposes the following plain HTTP REST endpoints:
+Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7231n.local`) and exposes the following plain HTTP REST endpoints:
 
 *-* `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
 
@@ -100,7 +100,7 @@ Once joined to your local network, the extender advertises itself over mDNS (`as
 You can test the IR transmission manually using `curl`:
 
 ```bash
-curl -X POST "http://astrion-ir-extender-bk7238.local..."
+curl -X POST "http://astrion-ir-extender-bk7231n.local..."
 ```
 
 *(Ensure all spaces inside the Pronto hex code are URL-encoded as `%20`)*.
