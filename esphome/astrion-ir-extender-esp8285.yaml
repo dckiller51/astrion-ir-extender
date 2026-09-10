@@ -6,6 +6,21 @@ esphome:
   name: "${name}"
   name_add_mac_suffix: true
   friendly_name: "${friendly_name}"
+  # Custom component exposing POST /pronto -- a raw HTTP body handler,
+  # not an ESPHome native entity, specifically to accept a full Pronto
+  # code in one request. ESPHome's native `text:` entity (used by an
+  # earlier version of this file) caps a single value at 255 characters,
+  # which many real captured Pronto codes exceed -- this replaces that
+  # chunk+fire two-step workaround with a single request.
+  includes:
+    - my_components/astrion_api/astrion_api.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          auto *astrion_api = new AstrionHttpEndpoint();
+          astrion_api->set_script(id(play_pronto_script));
+          App.register_component_(astrion_api);
 
 esp8266:
   board: esp8285
@@ -16,9 +31,9 @@ logger:
 # Optional: lets this extender also show up in Home Assistant for anyone
 # who has it and wants to trigger/automate the extender from there too.
 # Astrion Custom Dashboard itself never needs this — it always talks to
-# the extender directly over HTTP (see web_server + text below), so this
-# stays enabled with no encryption key/secrets file required, matching
-# the "no HA required" goal for a single generic firmware.
+# the extender directly over HTTP (see the /pronto endpoint below), so
+# this stays enabled with no encryption key/secrets file required,
+# matching the "no HA required" goal for a single generic firmware.
 api:
 
 ota:
@@ -50,11 +65,10 @@ wifi:
 
 captive_portal:
 
-# version 3 exposes the REST API Astrion Custom Dashboard's "Devices"
-# screen calls directly (POST /text/pronto_trigger/set?value=<pronto>) --
-# no Home Assistant, no ESPHome native (protobuf) API client needed on
-# the app side, just plain HTTP like every other network call the app
-# already makes.
+# Still needed for the built-in entity list/UI (buttons, sensors, etc.)
+# and for `web_server_base`, which the custom /pronto endpoint above
+# attaches itself to -- but Astrion Custom Dashboard's actual IR command
+# path is POST /pronto now, not a web_server-native entity endpoint.
 web_server:
   version: 3
 
@@ -83,32 +97,6 @@ switch:
   - platform: restart
     name: "${friendly_name} Restart"
 
-globals:
-  - id: pronto_buffer
-    type: std::string
-    restore_value: false
-    initial_value: '""'
-
-text:
-  - platform: template
-    id: pronto_chunk
-    name: "${friendly_name} Pronto Chunk"
-    optimistic: true
-    mode: text
-    max_length: 255 # hard ceiling enforced by ESPHome's text entity schema --
-    # this is why a single POST with a full Pronto code doesn't work: many
-    # real captured codes exceed 255 chars (confirmed: 359+ chars for a
-    # 34-pair burst alone). Long codes must be split into <=255-char
-    # chunks POSTed one at a time to THIS field (each one appends to the
-    # buffer below), then fired via the separate button once complete.
-    on_value:
-      then:
-        - lambda: |-
-            id(pronto_buffer) += x;
-        - logger.log:
-            format: "Pronto chunk appended, buffer is now %d chars"
-            args: [ "id(pronto_buffer).length()" ]
-
 button:
   - platform: factory_reset
     name: "${friendly_name} Factory Reset"
@@ -120,20 +108,18 @@ button:
     # button below, for when the extender isn't reachable over the
     # network at all anymore.
 
-  - platform: template
-    id: pronto_fire
-    name: "${friendly_name} Pronto Fire"
-    # Call this (POST /button/${name}_pronto_fire/press) after all chunks
-    # have been appended to transmit the accumulated buffer, then clear it
-    # for the next command.
-    on_press:
+script:
+  - id: play_pronto_script
+    mode: queued
+    parameters:
+      pronto_code: string
+    then:
       - logger.log:
           format: "Transmitting Pronto: %s"
-          args: [ "id(pronto_buffer).c_str()" ]
+          args: [ "pronto_code.c_str()" ]
       - remote_transmitter.transmit_pronto:
-          data: !lambda 'return id(pronto_buffer);'
-      - lambda: |-
-          id(pronto_buffer) = "";
+          transmitter_id: astrion_transmitter
+          data: !lambda "return pronto_code;"
 
 binary_sensor:
   - platform: status
@@ -162,6 +148,7 @@ status_led:
   # confirm it actually lights up before assuming it's right.
 
 remote_transmitter:
+  id: astrion_transmitter
   pin:
     number: GPIO4
     # Confirmed working pin: same one already validated by

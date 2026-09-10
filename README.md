@@ -101,25 +101,21 @@ The firmware ships with no network credentials baked in. On first boot (or if yo
 
 ## API Integration & Testing
 
-Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7231n.local`) and exposes the following plain HTTP REST endpoints:
+Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7231n.local`) and exposes the following plain HTTP endpoints:
 
 * `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
 * `GET /text_sensor/<device_name>_ip_address` — Reads the local IP address.
-* `POST /text/<device_name>_pronto_chunk/set?value=<chunk>` — Appends `<chunk>` to an internal buffer. **Call this one or more times** to build up a full Pronto code, since ESPHome's `text` entity schema caps a single value at 255 characters — many real captured Pronto codes are longer than that, so long codes need to be split into ≤255-char pieces and sent as separate calls.
-* `POST /button/<device_name>_pronto_fire/press` — Transmits everything accumulated in the buffer out the IR LED, then clears it for the next command. Call this once, after all chunks have been sent.
-
-**This is a two-step protocol, not a single request** — send the chunk(s) first, then press fire.
-
-You can test the IR transmission manually. If your Pronto code is short enough to fit in one chunk (≤255 chars):
+* `POST /pronto` — Transmits a Pronto code out the IR LED. Send the raw code as the plain-text request body (`Content-Type: text/plain`), one request per command — no chunking, no length limit (this is a custom raw HTTP handler, not one of ESPHome's native `web_server`-exposed entities, specifically so it isn't bound by the 255-character cap those have).
 
 ```bash
-curl -X POST "http://astrion-ir-extender-bk7231n.local/text/astrion_ir_extender_pronto_chunk/set?value=0000%20006D%20..."
-curl -X POST "http://astrion-ir-extender-bk7231n.local/button/astrion_ir_extender_pronto_fire/press"
+curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
+  -H "Content-Type: text/plain" \
+  --data-raw "0000 006D 0022 0000 015A 00AE 0015 0016 ..."
 ```
 
-For a longer code, split it into ≤255-char pieces and POST each to the same `pronto_chunk` endpoint before pressing fire — or just open the device's own web UI (`http://<ip>/`) in a browser, which shows the same entities and is easier for one-off manual testing than juggling `curl` calls by hand.
+A `200 OK` with body `OK - Pronto Code Received` confirms the extender accepted and queued the transmission.
 
-*(Ensure all spaces inside each Pronto chunk are URL-encoded as `%20`.)*
+*(No URL-encoding needed here — the code goes in the request body, not a query string.)*
 
 ## Factory reset
 

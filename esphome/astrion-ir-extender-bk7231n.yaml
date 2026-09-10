@@ -6,6 +6,21 @@ esphome:
   name: "${name}"
   name_add_mac_suffix: true
   friendly_name: "${friendly_name}"
+  # Custom component exposing POST /pronto -- a raw HTTP body handler,
+  # not an ESPHome native entity, specifically to accept a full Pronto
+  # code in one request. ESPHome's native `text:` entity (used by an
+  # earlier version of this file) caps a single value at 255 characters,
+  # which many real captured Pronto codes exceed -- this replaces that
+  # chunk+fire two-step workaround with a single request.
+  includes:
+    - my_components/astrion_api/astrion_api.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          auto *astrion_api = new AstrionHttpEndpoint();
+          astrion_api->set_script(id(play_pronto_script));
+          App.register_component_(astrion_api);
 
 # Beken BK7231N / CBU module
 bk72xx:
@@ -16,9 +31,9 @@ logger:
 # Optional: lets this extender also show up in Home Assistant for anyone
 # who has it and wants to trigger/automate the extender from there too.
 # Astrion Custom Dashboard itself never needs this — it always talks to
-# the extender directly over HTTP (see web_server + text below), so this
-# stays enabled with no encryption key/secrets file required, matching
-# the "no HA required" goal for a single generic firmware.
+# the extender directly over HTTP (see the /pronto endpoint below), so
+# this stays enabled with no encryption key/secrets file required,
+# matching the "no HA required" goal for a single generic firmware.
 api:
 
 ota:
@@ -50,11 +65,10 @@ wifi:
 
 captive_portal:
 
-# version 3 exposes the REST API Astrion Custom Dashboard's "Devices"
-# screen calls directly (POST /text/pronto_trigger/set?value=<pronto>) --
-# no Home Assistant, no ESPHome native (protobuf) API client needed on
-# the app side, just plain HTTP like every other network call the app
-# already makes.
+# Still needed for the built-in entity list/UI (buttons, sensors, etc.)
+# and for `web_server_base`, which the custom /pronto endpoint above
+# attaches itself to -- but Astrion Custom Dashboard's actual IR command
+# path is POST /pronto now, not a web_server-native entity endpoint.
 web_server:
   version: 3
 
@@ -83,32 +97,6 @@ switch:
   - platform: restart
     name: "${friendly_name} Restart"
 
-globals:
-  - id: pronto_buffer
-    type: std::string
-    restore_value: false
-    initial_value: '""'
-
-text:
-  - platform: template
-    id: pronto_chunk
-    name: "${friendly_name} Pronto Chunk"
-    optimistic: true
-    mode: text
-    max_length: 255 # hard ceiling enforced by ESPHome's text entity schema --
-    # this is why a single POST with a full Pronto code doesn't work: many
-    # real captured codes exceed 255 chars (confirmed: 359+ chars for a
-    # 34-pair burst alone). Long codes must be split into <=255-char
-    # chunks POSTed one at a time to THIS field (each one appends to the
-    # buffer below), then fired via the separate button once complete.
-    on_value:
-      then:
-        - lambda: |-
-            id(pronto_buffer) += x;
-        - logger.log:
-            format: "Pronto chunk appended, buffer is now %d chars"
-            args: [ "id(pronto_buffer).length()" ]
-
 button:
   - platform: factory_reset
     name: "${friendly_name} Factory Reset"
@@ -120,20 +108,18 @@ button:
     # button below, for when the extender isn't reachable over the
     # network at all anymore.
 
-  - platform: template
-    id: pronto_fire
-    name: "${friendly_name} Pronto Fire"
-    # Call this (POST /button/${name}_pronto_fire/press) after all chunks
-    # have been appended to transmit the accumulated buffer, then clear it
-    # for the next command.
-    on_press:
+script:
+  - id: play_pronto_script
+    mode: queued
+    parameters:
+      pronto_code: string
+    then:
       - logger.log:
           format: "Transmitting Pronto: %s"
-          args: [ "id(pronto_buffer).c_str()" ]
+          args: [ "pronto_code.c_str()" ]
       - remote_transmitter.transmit_pronto:
-          data: !lambda 'return id(pronto_buffer);'
-      - lambda: |-
-          id(pronto_buffer) = "";
+          transmitter_id: astrion_transmitter
+          data: !lambda "return pronto_code;"
 
 binary_sensor:
   - platform: status
@@ -141,9 +127,14 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      # Confirmed via a matching device template ("Btn;0" on pin 6):
-      # P6 is the physical button, not P24 as originally guessed.
-      number: P6
+      # CONFIRMED by reading this exact unit's own Tuya config partition
+      # out of flash (BK7231GUIFlashTool full backup + decode) -- this is
+      # ground truth, not a template guess. This device is an IRC03-style
+      # custom PCB (BK7231N soldered directly, no CB3S module), which has
+      # a different pinout than the generic CB3S-based lookalike -- see
+      # README/commit history for the earlier wrong guesses (P6, P26...)
+      # this replaced. "Pair/Reset All" -> P9.
+      number: P9
       inverted: true
       mode: INPUT_PULLUP
     name: "${friendly_name} Button"
@@ -154,28 +145,32 @@ binary_sensor:
           - button.press: factory_reset_button
 
 status_led:
-  # Confirmed via the same template ("WifiLED;1" on pin 8): P8 drives a
-  # WiFi status LED, not an IR transmit array as guessed from physical
-  # inspection -- that guess was wrong, this is the real assignment.
+  # CONFIRMED from this unit's own flash config: "WiFi LED" -> P24.
+  # The auto-generated OpenBeken template names this pin "WifiLED_n" --
+  # the "_n" suffix is the standard convention for active-low/inverted,
+  # which is the more reliable read of wfst_lv than a manual guess at its
+  # numeric meaning (this file briefly had `inverted` removed based on
+  # that manual guess; reverted here now that the "_n" naming settles it).
   pin:
-    number: P8
+    number: P24
     inverted: true
 
 remote_transmitter:
+  id: astrion_transmitter
   pin:
-    # Confirmed via the same template ("IRSend;3" on pin 26) -- neither
-    # P7 nor P8 was actually the transmitter; it's P26. Ignore the earlier
-    # guesses in this file's history, this is the verified one.
-    number: P26
+    # CONFIRMED from this unit's own flash config: "IR Sender" -> P7.
+    # CONFIRMED WORKING by an end-to-end test: this pin/config combo
+    # actually turned on a real TV via a real captured Pronto code.
+    number: P7
   carrier_duty_percent: 50%
 
-# Bonus, not currently used: the same template shows an IR *receiver* on
-# P7 ("IRRecv;2"). Astrion IR Extender is transmit-only by design (see
-# README), so this is left unconfigured for now -- but if this extender
-# ever grows a learning/capture feature (mirroring astrion-ir-sniffer),
-# P7 is where that would plug in. Uncomment to enable:
+# Bonus, not currently used: this unit's own config also confirms an IR
+# *receiver* on P8 ("IR Receiver"). Astrion IR Extender is transmit-only
+# by design (see README), so this is left unconfigured for now -- but if
+# this extender ever grows a learning/capture feature (mirroring
+# astrion-ir-sniffer), P8 is where that would plug in. Uncomment to enable:
 # remote_receiver:
 #   pin:
-#     number: P7
+#     number: P8
 #     inverted: true
 #   dump: pronto
