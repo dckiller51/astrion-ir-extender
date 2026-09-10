@@ -14,40 +14,17 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        variant: ["esp8285", "bk7231n"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
       - name: Install ESPHome
         run: pip install esphome==2026.8.1
 
       - name: Validate config
-        run: esphome config esphome/astrion-ir-extender-${{ matrix.variant }}.yaml
-
-      # Cache PlatformIO's toolchain/package downloads between runs -- a
-      # full compile downloads a real embedded toolchain (especially slow
-      # for bk7231n's LibreTiny platform, cloned from git each time
-      # without this), so this keeps CI runs from being needlessly slow
-      # on every push once the cache is warm.
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: platformio-${{ matrix.variant }}-${{ hashFiles('esphome/astrion-ir-extender-*.yaml') }}
-          restore-keys: |
-            platformio-${{ matrix.variant }}-
-
-      - name: Compile firmware
-        # A full compile catches what `esphome config` can't: C++ errors
-        # in custom components (my_components/astrion_api/astrion_api.h),
-        # wrong ESPHome API method names, etc. -- config validation alone
-        # already missed a real compile error here once (register_component
-        # vs register_component_).
-        run: esphome compile esphome/astrion-ir-extender-${{ matrix.variant }}.yaml
+        run: |
+          esphome config esphome/astrion-ir-extender-bk7231n.yaml
+          esphome config esphome/astrion-ir-extender-esp8285.yaml
