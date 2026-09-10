@@ -38,22 +38,40 @@ class AstrionHttpEndpoint : public esphome::Component {
           buffer->append(reinterpret_cast<const char *>(data), len);
 
           if (index + len == total) {
-            std::string pronto_code = *buffer;
+            // IMPORTANT: this callback runs on AsyncTCP's own task, NOT
+            // the main ESPHome loop -- calling straight into
+            // transmitter/logger/script APIs from here corrupted output
+            // in testing (garbled log tags, stray bytes, truncated
+            // strings) from the two threads touching shared state at the
+            // same time. Only hand off the data here; the actual
+            // transmission happens in loop() below, on the right thread.
+            this->pending_code_ = *buffer;
+            this->has_pending_ = true;
             delete buffer;
             request->_tempObject = nullptr;
-
-            if (this->script_ == nullptr) {
-              ESP_LOGE("astrion_api", "Pronto code received but no script configured");
-              request->send(500, "text/plain", "Script not configured\n");
-              return;
-            }
-
-            this->script_->execute(pronto_code);
             request->send(200, "text/plain", "OK - Pronto Code Received\n");
           }
         });
   }
 
+  void loop() override {
+    if (!this->has_pending_) return;
+    this->has_pending_ = false;
+
+    if (this->script_ == nullptr) {
+      ESP_LOGE("astrion_api", "Pronto code received but no script configured");
+      return;
+    }
+    this->script_->execute(this->pending_code_);
+  }
+
  protected:
   esphome::script::Script<std::string> *script_{nullptr};
+  std::string pending_code_;
+  // Simple single-writer (AsyncTCP callback) / single-reader (main loop)
+  // handoff flag. Not a full mutex -- a torn read is theoretically
+  // possible, but this is far safer than the direct cross-thread calls
+  // it replaces, and matches the level of rigor typical of ESPHome
+  // custom components for this kind of handoff.
+  volatile bool has_pending_{false};
 };
