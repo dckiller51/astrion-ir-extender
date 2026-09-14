@@ -35,6 +35,15 @@ logger:
 # this stays enabled with no encryption key/secrets file required,
 # matching the "no HA required" goal for a single generic firmware.
 api:
+  # ESPHome's api: component reboots the device if no API client (i.e. no
+  # Home Assistant) connects within reboot_timeout -- 15 minutes by
+  # default. Since this extender is explicitly meant to work without HA,
+  # nothing ever connects to this API on most setups, so the default
+  # silently rebooted the device every 15 minutes, forever, confirmed in
+  # testing (regular `[E][api:154]: No clients; rebooting` regardless of
+  # actual activity). Disabled entirely -- this component is here purely
+  # as an optional HA convenience, not something the extender depends on.
+  reboot_timeout: 0s
 
 ota:
   platform: esphome

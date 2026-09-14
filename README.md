@@ -11,9 +11,7 @@ whatever location you choose.
 firmware, flashed once, works for every user — the app talks to it directly
 over your local network.
 
-> **Status:** hardware bring-up in progress. This README documents the
-> firmware side; the "Devices" screen that discovers and registers
-> extenders in the app itself hasn't shipped yet.
+> **Status:** functional end-to-end — Astrion Custom Dashboard's web builder has an "IR Extenders" section (add/edit extenders, pick one as an IR device's target) and sends batched, sequenced commands. Hardware bring-up (pinout, WiFi onboarding, transmit reliability) has been validated on both supported chip families; ongoing testing continues on more complex multi-device Activities.
 
 ## Hardware Options
 
@@ -21,6 +19,8 @@ This project officially supports two low-cost hardware architectures:
 
 1. **ESP8285 / ESP8266 Version:** Generic "Tasmota IR remote" modules commonly sold on AliExpress/Amazon.
 2. **Beken BK7231N (CBU) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
+
+> ⚠️ **Visually-identical BK7231N IR blasters can have different pinouts.** During this project's own bring-up, a unit that looked identical to the generic CB3S-module type turned out to be an "IRC03"-style board (BK7231N soldered directly, no CB3S module) — completely different GPIO assignments. The pins hardcoded in `astrion-ir-extender-bk7231n.yaml` (P7 IR transmit, P9 button, P24 WiFi LED) are confirmed correct **for that specific unit**, read directly out of its own Tuya config partition — not guaranteed for every board sold under a similar listing. If your button/LED/IR don't work as expected, don't assume the yaml is wrong before checking your own unit's actual pinout (a full flash backup via [BK7231GUIFlashTool](https://github.com/openshwprojects/BK7231GUIFlashTool), decoded via [OpenBeken's template importer](https://openbekeniot.github.io/webapp/templateImporter.html), settles it definitively).
 
 ## Flashing
 
@@ -105,21 +105,39 @@ Once joined to your local network, the extender advertises itself over mDNS (`as
 
 * `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
 * `GET /text_sensor/<device_name>_ip_address` — Reads the local IP address.
-* `POST /pronto` — Transmits a Pronto code out the IR LED. Send the raw code as the plain-text request body (`Content-Type: text/plain`), one request per command — no chunking, no length limit (this is a custom raw HTTP handler, not one of ESPHome's native `web_server`-exposed entities, specifically so it isn't bound by the 255-character cap those have).
+* `POST /pronto` — Transmits one Pronto code, or a whole batch of them, out the IR LED. Send as the plain-text request body (`Content-Type: text/plain`) — no chunking, no length limit (this is a custom raw HTTP handler, not one of ESPHome's native `web_server`-exposed entities, specifically so it isn't bound by the 255-character cap those have).
 
-```bash
-curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
-  -H "Content-Type: text/plain" \
-  --data-raw "0000 006D 0022 0000 015A 00AE 0015 0016 ..."
-```
+  **Single code** — the whole body is the code:
 
-A `200 OK` with body `OK - Pronto Code Received` confirms the extender accepted and queued the transmission.
+  ```bash
+  curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
+    -H "Content-Type: text/plain" \
+    --data-raw "0000 006D 0022 0000 015A 00AE 0015 0016 ..."
+  ```
+
+  **Batch** — one code per line, each optionally prefixed `<delay_ms>>` (how long the extender should wait, after finishing the previous line, before transmitting this one). Useful for an Activity where one device needs to settle before the next command (e.g. a TV powering on before it'll accept an HDMI switch) — sending the whole sequence in one request avoids a gap between commands that a fast second request could otherwise arrive inside of, which used to be able to drop a command silently:
+
+  ```bash
+  curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
+    -H "Content-Type: text/plain" \
+    --data-raw $'0000 006D 0000 0002 0157 00AB ...\n800>0000 006D 0000 0002 ...\n0000 006D 0000 0002 ...'
+  ```
+
+  A plain single line (no `>` prefix) behaves exactly like the single-code form above.
+
+A `200 OK` with body `OK - Pronto Code(s) Queued` confirms the extender accepted the request — accepted, not necessarily transmitted yet, since a batch transmits its lines in sequence rather than all at once.
 
 *(No URL-encoding needed here — the code goes in the request body, not a query string.)*
 
 ## Factory reset
 
 Press and hold the physical button on the module for 5 seconds. This completely erases all stored runtime configurations (including saved WiFi credentials) and drops the device back into captive-portal onboarding mode.
+
+## Known limitations
+
+* **Two batches sent close together aren't guaranteed to stay in order relative to each other.** Within one `POST /pronto` batch, lines always transmit strictly in order. But if two separate requests arrive almost simultaneously (e.g. two Activities triggered back to back) and target the same extender, nothing currently prevents their sequences from interleaving. Not expected in normal use — the app sends one batched request per Activity switch — but worth knowing if you're driving this API directly.
+* **Multi-unit onboarding hotspot collision.** Every unit's temporary setup hotspot shares the same name/password (see [First boot](#first-boot--wifi-setup)) — fine for one extender at a time, ambiguous if onboarding several simultaneously.
+* **`api:` (the optional Home Assistant integration) no longer auto-reboots after 15 minutes without a client.** ESPHome's `api:` component reboots the device by default if nothing connects to it within `reboot_timeout` (15 minutes) — since this extender is meant to work without HA, nothing was ever connecting on most setups, so stock ESPHome silently rebooted it every 15 minutes, forever. Disabled (`reboot_timeout: 0s`) in both yaml files. If you *do* use the Home Assistant integration and want that watchdog back, remove that line (or set your own timeout).
 
 ## Related projects
 
