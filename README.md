@@ -101,16 +101,18 @@ The firmware ships with no network credentials baked in. On first boot (or if yo
 
 ## API Integration & Testing
 
-Once joined to your local network, the extender advertises itself over mDNS (`astrion-ir-extender-esp8285.local` or `astrion-ir-extender-bk7231n.local`) and exposes the following plain HTTP endpoints:
+Once joined to your local network, the extender advertises itself over mDNS as `astrion-ir-extender-<mac-suffix>.local` (e.g. `astrion-ir-extender-ffc798.local` — ESPHome's `name_add_mac_suffix:` appends the last 3 bytes of the MAC, not all 6) and exposes the following plain HTTP endpoints. You can use either that hostname or the device's IP address.
 
-* `GET /text_sensor/<device_name>_mac_address` — Reads the MAC address (useful for manual registration apps if mDNS multicast is blocked across VLANs).
-* `GET /text_sensor/<device_name>_ip_address` — Reads the local IP address.
+> **Registering an extender in Astrion Custom Dashboard is manual** — its "IR Extenders" form asks for a name, an IP address, and the MAC address. There is no network discovery: the builder runs in a browser, and browsers have no access to mDNS/multicast. Both values are easy to read off the device's own web UI (`http://<ip>/`).
+
+* `GET /text_sensor/astrion_ir_extender_mac_address` — Reads the MAC address. The object_id here comes from the entity's `"${friendly_name} Mac Address"` name, which is the *same on every unit* (only the device hostname gets MAC-suffixed, not the entity id) — so this path is fixed, just query it at the device's own IP. **Not verified against a real device in this project's own testing** (unlike `/pronto`, exercised extensively) — if it 404s, read the MAC straight off the device's web UI (`http://<ip>/`) instead, which definitely works.
+* `GET /text_sensor/astrion_ir_extender_ip_address` — Reads the local IP address. Same caveat as above — not independently verified.
 * `POST /pronto` — Transmits one Pronto code, or a whole batch of them, out the IR LED. Send as the plain-text request body (`Content-Type: text/plain`) — no chunking, no length limit (this is a custom raw HTTP handler, not one of ESPHome's native `web_server`-exposed entities, specifically so it isn't bound by the 255-character cap those have).
 
   **Single code** — the whole body is the code:
 
   ```bash
-  curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
+  curl -X POST "http://astrion-ir-extender-ffc798.local/pronto" \
     -H "Content-Type: text/plain" \
     --data-raw "0000 006D 0022 0000 015A 00AE 0015 0016 ..."
   ```
@@ -118,7 +120,7 @@ Once joined to your local network, the extender advertises itself over mDNS (`as
   **Batch** — one code per line, each optionally prefixed `<delay_ms>>` (how long the extender should wait, after finishing the previous line, before transmitting this one). Useful for an Activity where one device needs to settle before the next command (e.g. a TV powering on before it'll accept an HDMI switch) — sending the whole sequence in one request avoids a gap between commands that a fast second request could otherwise arrive inside of, which used to be able to drop a command silently:
 
   ```bash
-  curl -X POST "http://astrion-ir-extender-bk7231n.local/pronto" \
+  curl -X POST "http://astrion-ir-extender-ffc798.local/pronto" \
     -H "Content-Type: text/plain" \
     --data-raw $'0000 006D 0000 0002 0157 00AB ...\n800>0000 006D 0000 0002 ...\n0000 006D 0000 0002 ...'
   ```
