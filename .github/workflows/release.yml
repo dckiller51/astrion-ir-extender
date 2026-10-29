@@ -18,6 +18,8 @@ jobs:
             ext: "bin"
           - suffix: "bk7231n"
             ext: "uf2" # LibreTiny generates a compiled image package in .uf2 format
+          - suffix: "kc868-agv3"
+            ext: "factory.bin" # ESP32-S3: full image (bootloader + partitions + app) for web.esphome.io
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +78,7 @@ jobs:
             ### Installation / Flashing Instructions
 
             *   **ESP8285 Version (`.bin`)**: Can be flashed directly from your browser using Chrome or Edge via <https://web.esphome.io>.
+            *   **KinCony KC868-AGv3 (`.factory.bin`)**: Flash it from your browser using Chrome or Edge via <https://web.esphome.io>, over the box's USB-C port.
             *   **BK7231N Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
 
             Please refer to the [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README for detailed instructions.

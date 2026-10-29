@@ -118,11 +118,17 @@ button:
     # network at all anymore.
 
 script:
+  # One run per Pronto line received at POST /pronto (see astrion_api.h):
+  # queued, so a batch goes out in order, each line after its own delay.
   - id: play_pronto_script
     mode: queued
+    max_runs: 16
     parameters:
       pronto_code: string
+      delay_ms: int
+      out: int # IR output; this board has only one, so it's ignored
     then:
+      - delay: !lambda "return delay_ms;"
       - logger.log:
           format: "Transmitting Pronto: %s"
           args: [ "pronto_code.c_str()" ]

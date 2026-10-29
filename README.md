@@ -15,10 +15,11 @@ over your local network.
 
 ## Hardware Options
 
-This project officially supports two low-cost hardware architectures:
+This project supports three hardware options:
 
 1. **ESP8285 / ESP8266 Version:** Generic "Tasmota IR remote" modules commonly sold on AliExpress/Amazon.
 2. **Beken BK7231N (CBU) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
+3. **KinCony KC868-AGv3** *(new, not yet tested on a real unit)*: a ready-made ESP32-S3 box powered by USB-C, with **three IR outputs**: 7 built-in IR LEDs, plus two jacks for IR extension cables (bundle B includes two 2 m cables). Stick a cable's emitter on a device in a closed cabinet, and pick the output per command (see `?out=` below). Pinout from KinCony's own pin definition. The box also has an IR receiver (codes it sees are logged as Pronto in the web UI's logs) and RF 433 MHz, not used yet.
 
 > ⚠️ **Visually-identical BK7231N IR blasters can have different pinouts.** During this project's own bring-up, a unit that looked identical to the generic CB3S-module type turned out to be an "IRC03"-style board (BK7231N soldered directly, no CB3S module) — completely different GPIO assignments. The pins hardcoded in `astrion-ir-extender-bk7231n.yaml` (P7 IR transmit, P9 button, P24 WiFi LED) are confirmed correct **for that specific unit**, read directly out of its own Tuya config partition — not guaranteed for every board sold under a similar listing. If your button/LED/IR don't work as expected, don't assume the yaml is wrong before checking your own unit's actual pinout (a full flash backup via [BK7231GUIFlashTool](https://github.com/openshwprojects/BK7231GUIFlashTool), decoded via [OpenBeken's template importer](https://openbekeniot.github.io/webapp/templateImporter.html), settles it definitively).
 
@@ -30,6 +31,13 @@ This project officially supports two low-cost hardware architectures:
 2. Connect your ESP module to your computer via USB.
 3. Open <https://web.esphome.io> in a WebSerial-compatible browser (Chrome or Edge).
 4. Click **Connect**, select your serial port, choose to install from a local file, and select the `.bin` you downloaded.
+
+### Option 1b: KinCony KC868-AGv3 (`.factory.bin`) — Quick Web Install
+
+1. Download the latest `astrion-ir-extender-kc868-agv3.factory.bin` from [Releases](https://github.com/dckiller51/astrion-ir-extender/releases).
+2. Connect the box to your computer with a USB-C **data** cable.
+3. Open <https://web.esphome.io> in Chrome or Edge, click **Connect**, select the port and install the `.bin`.
+4. If the port doesn't show up or the install doesn't start: unplug the box, hold its download button (GPIO0), plug it back in, release the button and try again.
 
 ### Option 2: BK7231N / CBU Version (`.uf2`) — Wired Serial UART
 
@@ -81,6 +89,9 @@ docker run --rm -it -p 6052:6052 -v "\${PWD}/esphome:/config" esphome/esphome
 # To compile for ESP8285:
 docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-esp8285.yaml
 
+# To compile for KinCony KC868-AGv3:
+docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-kc868-agv3.yaml
+
 # To compile for Beken BK7231N:
 docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-extender-bk7231n.yaml
 ```
@@ -127,7 +138,15 @@ Once joined to your local network, the extender advertises itself over mDNS as `
 
   A plain single line (no `>` prefix) behaves exactly like the single-code form above.
 
-A `200 OK` with body `OK - Pronto Code(s) Queued` confirms the extender accepted the request — accepted, not necessarily transmitted yet, since a batch transmits its lines in sequence rather than all at once.
+  **Output** (KinCony KC868-AGv3 only) — add `?out=N` to the URL: `1` built-in IR LEDs (the default, also when `?out=` is left out), `2` extension cable 1, `3` extension cable 2. It applies to every line of the request. Boards with a single IR output ignore it.
+
+  ```bash
+  curl -X POST "http://astrion-ir-extender-ffc798.local/pronto?out=2" \
+    -H "Content-Type: text/plain" \
+    --data-raw "0000 006D 0022 0000 015A 00AE 0015 0016 ..."
+  ```
+
+A `200 OK` with body `OK - Pronto Code(s) Queued` confirms the extender accepted the request — accepted, not necessarily transmitted yet, since a batch transmits its lines in sequence rather than all at once. If 7 requests are already waiting, the extender answers `503` and drops the new one, instead of pretending it was queued.
 
 *(No URL-encoding needed here — the code goes in the request body, not a query string.)*
 

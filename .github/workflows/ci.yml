@@ -28,3 +28,4 @@ jobs:
         run: |
           esphome config esphome/astrion-ir-extender-bk7231n.yaml
           esphome config esphome/astrion-ir-extender-esp8285.yaml
+          esphome config esphome/astrion-ir-extender-kc868-agv3.yaml

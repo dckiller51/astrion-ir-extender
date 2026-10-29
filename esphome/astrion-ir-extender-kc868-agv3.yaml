@@ -1,0 +1,170 @@
+# KinCony KC868-AGv3: ESP32-S3-WROOM-1U N16R8, USB-C power, IR receiver,
+# 3 IR outputs (7 built-in IR LEDs + 2 extension cable jacks), RF433 TX/RX,
+# buzzer. Pinout from KinCony's own "ESP32 I/O pin definition" for this
+# board -- not yet tested on a real unit by this project.
+#
+# IR outputs, picked with POST /pronto?out=N (see README):
+#   1 (or no ?out=)  built-in IR LEDs (GPIO47)
+#   2                extension cable 1 (GPIO43)
+#   3                extension cable 2 (GPIO44)
+
+substitutions:
+  name: "astrion-ir-extender"
+  friendly_name: "Astrion IR Extender"
+
+esphome:
+  name: "${name}"
+  name_add_mac_suffix: true
+  friendly_name: "${friendly_name}"
+  includes:
+    - my_components/astrion_api/astrion_api.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          auto *astrion_api = new AstrionHttpEndpoint();
+          astrion_api->set_script(id(play_pronto_script));
+          App.register_component_(astrion_api);
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    # Same AsyncWebServer API as the ESP8285 build, which astrion_api.h uses.
+    type: arduino
+
+# GPIO43/GPIO44 are the ESP32-S3's default UART0 (TX/RX), and KinCony wires
+# them to the two IR extension cable jacks. Logs go to the USB-C port's
+# built-in USB serial instead, so the logger never drives those pins.
+logger:
+  hardware_uart: USB_CDC
+
+api:
+  # See astrion-ir-extender-esp8285.yaml: no Home Assistant connected must
+  # not mean a reboot every 15 minutes.
+  reboot_timeout: 0s
+
+ota:
+  platform: esphome
+
+wifi:
+  fast_connect: true
+  ap:
+    ssid: "${friendly_name} Setup"
+    password: "astrion1234"
+
+captive_portal:
+
+web_server:
+  version: 3
+
+sensor:
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "${friendly_name} IP Address"
+    ssid:
+      name: "${friendly_name} SSID"
+    mac_address:
+      name: "${friendly_name} Mac Address"
+
+switch:
+  - platform: restart
+    name: "${friendly_name} Restart"
+
+button:
+  - platform: factory_reset
+    name: "${friendly_name} Factory Reset"
+    id: factory_reset_button
+
+script:
+  # One run per Pronto line received at POST /pronto (see astrion_api.h):
+  # queued, so a batch goes out in order, each line after its own delay.
+  - id: play_pronto_script
+    mode: queued
+    max_runs: 16
+    parameters:
+      pronto_code: string
+      delay_ms: int
+      out: int
+    then:
+      - delay: !lambda "return delay_ms;"
+      - logger.log:
+          format: "Transmitting Pronto on output %d: %s"
+          args: ["out <= 1 ? 1 : out", "pronto_code.c_str()"]
+      - if:
+          condition:
+            lambda: "return out == 2;"
+          then:
+            - remote_transmitter.transmit_pronto:
+                transmitter_id: ir_cable_1
+                data: !lambda "return pronto_code;"
+          else:
+            - if:
+                condition:
+                  lambda: "return out == 3;"
+                then:
+                  - remote_transmitter.transmit_pronto:
+                      transmitter_id: ir_cable_2
+                      data: !lambda "return pronto_code;"
+                else:
+                  - remote_transmitter.transmit_pronto:
+                      transmitter_id: ir_builtin
+                      data: !lambda "return pronto_code;"
+
+binary_sensor:
+  - platform: status
+    name: "${friendly_name} Status"
+
+  # The board's "download" button (GPIO0): hold 5 s to factory reset.
+  - platform: gpio
+    pin:
+      number: GPIO0
+      inverted: true
+      mode: INPUT_PULLUP
+      ignore_strapping_warning: true
+    name: "${friendly_name} Button"
+    on_multi_click:
+      - timing:
+          - ON for at least 5s
+        then:
+          - button.press: factory_reset_button
+
+remote_transmitter:
+  - id: ir_builtin
+    pin: GPIO47
+    carrier_duty_percent: 50%
+    # Blocking, like the other boards: a transmission ends before the next
+    # queued line starts (astrion_api.h relies on that for batch order).
+    non_blocking: false
+  - id: ir_cable_1
+    pin: GPIO43
+    carrier_duty_percent: 50%
+    # Blocking, like the other boards: a transmission ends before the next
+    # queued line starts (astrion_api.h relies on that for batch order).
+    non_blocking: false
+  - id: ir_cable_2
+    pin: GPIO44
+    carrier_duty_percent: 50%
+    # Blocking, like the other boards: a transmission ends before the next
+    # queued line starts (astrion_api.h relies on that for batch order).
+    non_blocking: false
+
+# The built-in IR receiver logs every code it sees as Pronto (web UI → Logs),
+# handy to check a remote's code. Astrion doesn't use it yet.
+remote_receiver:
+  pin:
+    number: GPIO1
+    inverted: true
+  dump: pronto
+
+# Not used yet, for later: RF433 sender GPIO2, RF433 receiver GPIO9,
+# buzzer GPIO21, I2C SDA GPIO11 / SCL GPIO10 (24C02 EEPROM at 0x50).
