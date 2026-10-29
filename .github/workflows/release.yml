@@ -12,6 +12,8 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     strategy:
+      # One board failing to build doesn't stop the others' firmware.
+      fail-fast: false
       matrix:
         include:
           - suffix: "esp8285"
@@ -59,6 +61,8 @@ jobs:
 
   publish-release:
     needs: build-and-release
+    # Publishes whatever firmware did build, even if one board failed.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +78,8 @@ jobs:
         with:
           files: firmware-artifacts/*
           generate_release_notes: true
+          # A tag with a suffix (v0.3.0-beta.1) is published as a pre-release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             ### Installation / Flashing Instructions
 
