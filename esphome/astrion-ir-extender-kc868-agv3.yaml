@@ -31,7 +31,6 @@ esp32:
   variant: esp32s3
   flash_size: 16MB
   framework:
-    # Same AsyncWebServer API as the ESP8285 build, which astrion_api.h uses.
     type: arduino
 
 # GPIO43/GPIO44 are the ESP32-S3's default UART0 (TX/RX), and KinCony wires

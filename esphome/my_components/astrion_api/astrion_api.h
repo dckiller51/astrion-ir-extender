@@ -20,7 +20,13 @@
 // have several (KC868-AGv3: 1 = built-in LEDs, 2 = extension cable 1,
 // 3 = extension cable 2). 0 or absent = the board's default output; a
 // board with a single output ignores it.
-class AstrionHttpEndpoint : public esphome::Component {
+//
+// Registered as an AsyncWebHandler on ESPHome's web server, which works on
+// every chip: ESP32 builds use ESPHome's own ESP-IDF web server (no
+// `server->on()`, no `_tempObject`), ESP8266 and LibreTiny the Arduino
+// ESPAsyncWebServer -- both call canHandle(), handleBody() for each chunk
+// of a text/plain body, then handleRequest() once it's all in.
+class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
  public:
   // Set from YAML (on_boot lambda), where `id(play_pronto_script)` is
   // valid. `id()` is ESPHome's YAML-codegen macro, not a real C++ symbol
@@ -37,44 +43,55 @@ class AstrionHttpEndpoint : public esphome::Component {
       ESP_LOGE("astrion_api", "web_server_base not available -- is `web_server:` configured?");
       return;
     }
-    auto *server = esphome::web_server_base::global_web_server_base->get_server();
-    if (server == nullptr) {
-      ESP_LOGE("astrion_api", "AsyncWebServer instance not available");
+    esphome::web_server_base::global_web_server_base->add_handler(this);
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  bool canHandle(AsyncWebServerRequest *request) const override {
+    if (request->method() != HTTP_POST) return false;
+#ifdef USE_ESP32
+    char url_buf[AsyncWebServerRequest::URL_BUF_SIZE];
+    return request->url_to(url_buf) == "/pronto";
+#else
+    return request->url() == "/pronto";
+#endif
+  }
+
+  // Not trivial: this handler needs the request body.
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  bool isRequestHandlerTrivial() const override { return false; }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) override {
+    // One request at a time is assumed (the IR codes come from one remote):
+    // a new body (index 0) starts over.
+    if (index == 0) this->body_.clear();
+    this->body_.append(reinterpret_cast<const char *>(data), len);
+  }
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  void handleRequest(AsyncWebServerRequest *request) override {
+    // IMPORTANT: this runs on the web server's own task, NOT the main
+    // ESPHome loop -- calling straight into transmitter/logger/script APIs
+    // from here corrupted output in testing (garbled log tags, stray bytes,
+    // truncated strings) from the two threads touching shared state at the
+    // same time. Only queue the data here; the actual transmission happens
+    // in loop() below, on the right thread.
+    Request item;
+    item.body.swap(this->body_);
+    if (request->hasParam("out")) {
+      item.out = atoi(request->getParam("out")->value().c_str());
+    }
+    if (item.body.find_first_not_of(" \t\r\n") == std::string::npos) {
+      request->send(400, "text/plain", "Send the Pronto code(s) as the body, Content-Type: text/plain\n");
       return;
     }
-
-    server->on(
-        "/pronto", HTTP_POST, [](AsyncWebServerRequest *request) {}, nullptr,
-        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-          if (index == 0) {
-            auto *item = new Request();
-            if (request->hasParam("out")) {
-              item->out = atoi(request->getParam("out")->value().c_str());
-            }
-            request->_tempObject = item;
-          }
-          auto *item = static_cast<Request *>(request->_tempObject);
-          item->body.append(reinterpret_cast<const char *>(data), len);
-
-          if (index + len == total) {
-            // IMPORTANT: this callback runs on AsyncTCP's own task, NOT
-            // the main ESPHome loop -- calling straight into
-            // transmitter/logger/script APIs from here corrupted output
-            // in testing (garbled log tags, stray bytes, truncated
-            // strings) from the two threads touching shared state at the
-            // same time. Only queue the data here; the actual
-            // transmission happens in loop() below, on the right thread.
-            bool queued = this->enqueue(*item);
-            delete item;
-            request->_tempObject = nullptr;
-            if (!queued) {
-              ESP_LOGW("astrion_api", "Pronto queue full (%d pending) -- dropping this request", (int) QUEUE_CAPACITY - 1);
-              request->send(503, "text/plain", "Busy - Pronto queue full\n");
-              return;
-            }
-            request->send(200, "text/plain", "OK - Pronto Code(s) Queued\n");
-          }
-        });
+    if (!this->enqueue(item)) {
+      ESP_LOGW("astrion_api", "Pronto queue full (%d pending) -- dropping this request", (int) QUEUE_CAPACITY - 1);
+      request->send(503, "text/plain", "Busy - Pronto queue full\n");
+      return;
+    }
+    request->send(200, "text/plain", "OK - Pronto Code(s) Queued\n");
   }
 
   void loop() override {
@@ -135,6 +152,7 @@ class AstrionHttpEndpoint : public esphome::Component {
   };
 
   PlayScript *script_{nullptr};
+  std::string body_;  // the request body being received, see handleBody()
   uint32_t last_heartbeat_{0};
 
   // Classic lock-free single-producer (enqueue(), called from AsyncTCP's
