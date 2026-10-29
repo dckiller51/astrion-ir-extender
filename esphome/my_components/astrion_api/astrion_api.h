@@ -27,7 +27,9 @@ class AstrionHttpEndpoint : public esphome::Component {
   // -- it can't be used directly inside this plain .h file, which is why
   // the script pointer is injected from the outside instead.
   // Script parameters: pronto_code, delay_ms, out.
-  using PlayScript = esphome::script::Script<std::string, int32_t, int32_t>;
+  // Plain `int`: ESPHome declares a script `int` parameter as C++ `int`, which isn't
+  // int32_t on every chip (on BK7231N, int32_t is `long`, a different type).
+  using PlayScript = esphome::script::Script<std::string, int, int>;
   void set_script(PlayScript *script) { this->script_ = script; }
 
   void setup() override {
@@ -112,7 +114,7 @@ class AstrionHttpEndpoint : public esphome::Component {
       if (end == std::string::npos) end = next.body.size();
       std::string line = next.body.substr(start, end - start);
       start = end + 1;
-      int32_t delay_ms = 0;
+      int delay_ms = 0;
       size_t mark = line.find('>');
       if (mark != std::string::npos) {
         delay_ms = atoi(line.substr(0, mark).c_str());
@@ -129,7 +131,7 @@ class AstrionHttpEndpoint : public esphome::Component {
  protected:
   struct Request {
     std::string body;
-    int32_t out{0};
+    int out{0};
   };
 
   PlayScript *script_{nullptr};
