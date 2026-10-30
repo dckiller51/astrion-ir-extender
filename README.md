@@ -103,7 +103,7 @@ docker run --rm -v "\${PWD}/esphome:/config" esphome/esphome compile astrion-ir-
 
 The firmware ships with no network credentials baked in. On first boot (or if your local network becomes unreachable), the device creates a temporary provisioning hotspot:
 
-1. Connect your phone or computer to the WiFi network named **`Astrion IR Extender Setup`**.
+1. Connect your phone or computer to the WiFi network named **`Astrion IR Extender Setup`**. Its password is **`astrion1234`** (the same on every unit).
 2. A captive portal page should open automatically. If it doesn't, navigate to <http://192.168.4.1>.
 3. Enter your local WiFi SSID and password.
 4. The extender will reboot and connect to your home network.
