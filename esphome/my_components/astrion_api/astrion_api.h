@@ -44,6 +44,11 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
       return;
     }
     esphome::web_server_base::global_web_server_base->add_handler(this);
+    // Drained from ESPHome's scheduler, on the main loop. Not from loop():
+    // this component is registered from on_boot, after ESPHome has already
+    // built its list of components to loop, so loop() was never called --
+    // the queue filled up (7 requests) and every later request was dropped.
+    this->set_interval("astrion_drain", DRAIN_INTERVAL_MS, [this]() { this->drain_(); });
   }
 
   // NOLINTNEXTLINE(readability-identifier-naming)
@@ -76,7 +81,7 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
     // from here corrupted output in testing (garbled log tags, stray bytes,
     // truncated strings) from the two threads touching shared state at the
     // same time. Only queue the data here; the actual transmission happens
-    // in loop() below, on the right thread.
+    // in drain_() below, on the main loop.
     Request item;
     item.body.swap(this->body_);
     if (request->hasParam("out")) {
@@ -94,18 +99,7 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
     request->send(200, "text/plain", "OK - Pronto Code(s) Queued\n");
   }
 
-  void loop() override {
-    // DIAGNOSTIC, temporary: confirms whether loop() runs at all for a
-    // component constructed+registered dynamically via on_boot (as
-    // opposed to a normal statically-declared one) -- the queue staying
-    // permanently full even after a full minute of idle time and a
-    // reboot suggests it might not be. Remove once confirmed either way.
-    uint32_t now = millis();
-    if (now - this->last_heartbeat_ >= 5000) {
-      this->last_heartbeat_ = now;
-      ESP_LOGD("astrion_api", "loop() heartbeat, queue depth=%d", (int) ((this->tail_ - this->head_ + QUEUE_CAPACITY) % QUEUE_CAPACITY));
-    }
-
+  void drain_() {
     // Drains exactly one queued code per call. remote_transmitter's
     // transmit_pronto is a blocking, synchronous call (confirmed by
     // ESPHome's own "took a long time" warning during testing -- it
@@ -153,7 +147,6 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
 
   PlayScript *script_{nullptr};
   std::string body_;  // the request body being received, see handleBody()
-  uint32_t last_heartbeat_{0};
 
   // Classic lock-free single-producer (enqueue(), called from AsyncTCP's
   // task)/single-consumer (dequeue(), called from the main loop task)
@@ -167,6 +160,7 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
   // same technique Arduino's own core uses for its interrupt-driven
   // Serial RX buffer.
   static constexpr size_t QUEUE_CAPACITY = 8;
+  static constexpr uint32_t DRAIN_INTERVAL_MS = 20;
   Request queue_[QUEUE_CAPACITY];
   volatile size_t head_{0};
   volatile size_t tail_{0};
