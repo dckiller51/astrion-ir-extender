@@ -22,9 +22,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install ESPHome
-        run: pip install esphome==2026.8.1
+        run: pip install -r requirements.txt
 
       - name: Validate config
         run: |
           esphome config esphome/astrion-ir-extender-bk7231n.yaml
           esphome config esphome/astrion-ir-extender-esp8285.yaml
+          esphome config esphome/astrion-ir-extender-kc868-agv3.yaml

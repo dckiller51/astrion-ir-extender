@@ -12,12 +12,19 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     strategy:
+      # One board failing to build doesn't stop the others' firmware.
+      fail-fast: false
       matrix:
         include:
           - suffix: "esp8285"
             ext: "bin"
           - suffix: "bk7231n"
             ext: "uf2" # LibreTiny generates a compiled image package in .uf2 format
+          - suffix: "kc868-agv3"
+            ext: "factory.bin" # ESP32-S3: full image (bootloader + partitions + app) for web.esphome.io
+            # The app alone, for updating over the air (web UI's "OTA Update"): a
+            # factory image sent there is not taken, the box keeps its old firmware.
+            ota: "ota.bin"
     steps:
       - uses: actions/checkout@v4
 
@@ -26,10 +33,29 @@ jobs:
           python-version: "3.12"
 
       - name: Install ESPHome
-        run: pip install esphome==2026.8.1
+        run: pip install -r requirements.txt
 
+      # The toolchains and the ESP-IDF framework (several hundred MB, from
+      # GitHub releases) are kept between runs: a download that times out
+      # (504) then no longer fails the build once they are cached.
+      - name: Cache toolchains
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/esphome
+            ~/.platformio
+          key: toolchains-${{ matrix.suffix }}-${{ hashFiles('requirements.txt') }}
+
+      # GitHub's release downloads sometimes answer 504 for a while: try again
+      # (ESPHome itself only retries for a few seconds).
       - name: Compile firmware
-        run: esphome compile esphome/astrion-ir-extender-${{ matrix.suffix }}.yaml
+        run: |
+          for attempt in 1 2 3; do
+            esphome compile esphome/astrion-ir-extender-${{ matrix.suffix }}.yaml && exit 0
+            echo "::warning::Compile failed (attempt $attempt), retrying in 60 s"
+            sleep 60
+          done
+          exit 1
 
       - name: Locate compiled binary
         id: locate
@@ -46,8 +72,24 @@ jobs:
           output_name="astrion-ir-extender-${{ matrix.suffix }}.${{ matrix.ext }}"
           cp "$bin_path" "$output_name"
 
-          # Pass filename output to the next steps
-          echo "bin_path=$output_name" >> "$GITHUB_OUTPUT"
+          files="$output_name"
+          if [ -n "${{ matrix.ota }}" ]; then
+            ota_path=$(find esphome/.esphome/build -name "firmware.${{ matrix.ota }}" | head -n 1)
+            if [ -z "$ota_path" ]; then
+              echo "::error::No firmware.${{ matrix.ota }} found under esphome/.esphome/build"
+              exit 1
+            fi
+            ota_name="astrion-ir-extender-${{ matrix.suffix }}.${{ matrix.ota }}"
+            cp "$ota_path" "$ota_name"
+            files="$files"$'\n'"$ota_name"
+          fi
+
+          # Pass the file names to the next steps
+          {
+            echo "bin_path<<EOF"
+            echo "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload Artifacts (Temporary)
         uses: actions/upload-artifact@v4
@@ -57,6 +99,8 @@ jobs:
 
   publish-release:
     needs: build-and-release
+    # Publishes whatever firmware did build, even if one board failed.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,10 +116,13 @@ jobs:
         with:
           files: firmware-artifacts/*
           generate_release_notes: true
+          # A tag with a suffix (v0.3.0-beta.1) is published as a pre-release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             ### Installation / Flashing Instructions
 
             *   **ESP8285 Version (`.bin`)**: Can be flashed directly from your browser using Chrome or Edge via <https://web.esphome.io>.
+            *   **KinCony KC868-AGv3**: first install, the **`.factory.bin`** from your browser using Chrome or Edge via <https://web.esphome.io>, over the box's USB-C port. Updates over Wi-Fi (the box's web page, "OTA Update"): the **`.ota.bin`** -- a `.factory.bin` sent there is not taken, the box keeps its old firmware.
             *   **BK7231N Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
 
             Please refer to the [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README for detailed instructions.
