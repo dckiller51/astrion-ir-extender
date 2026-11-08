@@ -30,10 +30,29 @@ jobs:
           python-version: "3.12"
 
       - name: Install ESPHome
-        run: pip install esphome==2026.8.1
+        run: pip install -r requirements.txt
 
+      # The toolchains and the ESP-IDF framework (several hundred MB, from
+      # GitHub releases) are kept between runs: a download that times out
+      # (504) then no longer fails the build once they are cached.
+      - name: Cache toolchains
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/esphome
+            ~/.platformio
+          key: toolchains-${{ matrix.suffix }}-${{ hashFiles('requirements.txt') }}
+
+      # GitHub's release downloads sometimes answer 504 for a while: try again
+      # (ESPHome itself only retries for a few seconds).
       - name: Compile firmware
-        run: esphome compile esphome/astrion-ir-extender-${{ matrix.suffix }}.yaml
+        run: |
+          for attempt in 1 2 3; do
+            esphome compile esphome/astrion-ir-extender-${{ matrix.suffix }}.yaml && exit 0
+            echo "::warning::Compile failed (attempt $attempt), retrying in 60 s"
+            sleep 60
+          done
+          exit 1
 
       - name: Locate compiled binary
         id: locate
