@@ -1,12 +1,15 @@
 # KinCony KC868-AGv3: ESP32-S3-WROOM-1U N16R8, USB-C power, IR receiver,
 # 3 IR outputs (7 built-in IR LEDs + 2 extension cable jacks), RF433 TX/RX,
 # buzzer. Pinout from KinCony's own "ESP32 I/O pin definition" for this
-# board -- not yet tested on a real unit by this project.
+# board, tested on a real unit with its extension cables.
 #
 # IR outputs, picked with POST /pronto?out=N (see README):
 #   1 (or no ?out=)  built-in IR LEDs (GPIO47)
 #   2                extension cable 1 (GPIO43)
 #   3                extension cable 2 (GPIO44)
+# Box face up (home button towards you), connectors on the far edge: the
+# right-hand jack is cable 2, the other one cable 1.
+# The jacks are 2.5 mm: Logitech Harmony mini IR blasters work in them too.
 
 substitutions:
   name: "astrion-ir-extender"

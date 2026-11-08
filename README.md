@@ -19,7 +19,7 @@ This project supports three hardware options:
 
 1. **ESP8285 / ESP8266 Version:** Generic "Tasmota IR remote" modules commonly sold on AliExpress/Amazon.
 2. **Beken BK7231N (CBU) Version:** Newer Tuya smart IR blasters utilizing the LibreTiny ecosystem.
-3. **KinCony KC868-AGv3** *(new, not yet tested on a real unit)*: a ready-made ESP32-S3 box powered by USB-C, with **three IR outputs**: 7 built-in IR LEDs, plus two jacks for IR extension cables (bundle B includes two 2 m cables). Stick a cable's emitter on a device in a closed cabinet, and pick the output per command (see `?out=` below). Pinout from KinCony's own pin definition. The box also has an IR receiver (codes it sees are logged as Pronto in the web UI's logs) and RF 433 MHz, not used yet.
+3. **KinCony KC868-AGv3** *(new, tested with its extension cables)*: a ready-made ESP32-S3 box powered by USB-C, with **three IR outputs**: 7 built-in IR LEDs, plus two **2.5 mm** jacks for IR extension cables (bundle B includes two 2 m cables). Stick a cable's emitter on a device in a closed cabinet, and pick the output per command (see `?out=` below). **Logitech Harmony mini IR blasters** (2.5 mm plug) work in these jacks too, tested: they send further than KinCony's cables and their stick-on heads hold better. Pinout from KinCony's own pin definition. The box also has an IR receiver (codes it sees are logged as Pronto in the web UI's logs) and RF 433 MHz, not used yet.
 
 > ⚠️ **Visually-identical BK7231N IR blasters can have different pinouts.** During this project's own bring-up, a unit that looked identical to the generic CB3S-module type turned out to be an "IRC03"-style board (BK7231N soldered directly, no CB3S module) — completely different GPIO assignments. The pins hardcoded in `astrion-ir-extender-bk7231n.yaml` (P7 IR transmit, P9 button, P24 WiFi LED) are confirmed correct **for that specific unit**, read directly out of its own Tuya config partition — not guaranteed for every board sold under a similar listing. If your button/LED/IR don't work as expected, don't assume the yaml is wrong before checking your own unit's actual pinout (a full flash backup via [BK7231GUIFlashTool](https://github.com/openshwprojects/BK7231GUIFlashTool), decoded via [OpenBeken's template importer](https://openbekeniot.github.io/webapp/templateImporter.html), settles it definitively).
 
@@ -140,7 +140,7 @@ Once joined to your local network, the extender advertises itself over mDNS as `
 
   A plain single line (no `>` prefix) behaves exactly like the single-code form above.
 
-  **Output** (KinCony KC868-AGv3 only) — add `?out=N` to the URL: `1` built-in IR LEDs (the default, also when `?out=` is left out), `2` extension cable 1, `3` extension cable 2. It applies to every line of the request. Boards with a single IR output ignore it.
+  **Output** (KinCony KC868-AGv3 only) — add `?out=N` to the URL: `1` built-in IR LEDs (the default, also when `?out=` is left out), `2` extension cable 1, `3` extension cable 2. Which jack is which: box face up (home button towards you), connectors on the far edge — the **right-hand jack is cable 2** (`?out=3`), the other one cable 1 (`?out=2`). It applies to every line of the request. Boards with a single IR output ignore it.
 
   ```bash
   curl -X POST "http://astrion-ir-extender-ffc798.local/pronto?out=2" \
