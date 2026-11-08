@@ -44,10 +44,14 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
       return;
     }
     esphome::web_server_base::global_web_server_base->add_handler(this);
-    // Drained from ESPHome's scheduler, on the main loop. Not from loop():
-    // this component is registered from on_boot, after ESPHome has already
-    // built its list of components to loop, so loop() was never called --
-    // the queue filled up (7 requests) and every later request was dropped.
+    // Called straight from the YAML's on_boot lambda, never through
+    // App.register_component_(): ESPHome sizes its component list at build
+    // time, to exactly the components the YAML declares, and silently drops
+    // one added later -- so setup() never ran, /pronto was never registered,
+    // and on ESP32 every POST ended in "Unsupported content type for POST:
+    // text/plain" (the IDF web server found no handler for the raw body).
+    // Drained from ESPHome's scheduler, on the main loop: loop() is never
+    // called for a component that isn't in that list.
     this->set_interval("astrion_drain", DRAIN_INTERVAL_MS, [this]() { this->drain_(); });
   }
 

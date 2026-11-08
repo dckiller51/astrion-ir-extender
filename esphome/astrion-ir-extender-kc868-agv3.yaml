@@ -24,7 +24,7 @@ esphome:
       - lambda: |-
           auto *astrion_api = new AstrionHttpEndpoint();
           astrion_api->set_script(id(play_pronto_script));
-          App.register_component_(astrion_api);
+          astrion_api->setup();
 
 esp32:
   board: esp32-s3-devkitc-1
