@@ -53,6 +53,9 @@ class AstrionHttpEndpoint : public esphome::Component, public AsyncWebHandler {
     // Drained from ESPHome's scheduler, on the main loop: loop() is never
     // called for a component that isn't in that list.
     this->set_interval("astrion_drain", DRAIN_INTERVAL_MS, [this]() { this->drain_(); });
+    // Shown once at boot: without it, a firmware where /pronto never got
+    // registered looks the same as a working one until a code is sent.
+    ESP_LOGI("astrion_api", "POST /pronto ready");
   }
 
   // NOLINTNEXTLINE(readability-identifier-naming)

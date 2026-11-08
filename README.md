@@ -39,6 +39,8 @@ This project supports three hardware options:
 3. Open <https://web.esphome.io> in Chrome or Edge, click **Connect**, select the port and install the `.bin`.
 4. If the port doesn't show up or the install doesn't start: unplug the box, hold its download button (GPIO0), plug it back in, release the button and try again.
 
+**Updating later, over Wi-Fi:** open the box's web page (`http://<box-ip>/`), **OTA Update**, and send `astrion-ir-extender-kc868-agv3.ota.bin` -- not the `.factory.bin`, which the box doesn't take there (it keeps its old firmware). The firmware's compile date, on that same page, tells which one is running.
+
 ### Option 2: BK7231N / CBU Version (`.uf2`) — Wired Serial UART
 
 Because `web.esphome.io` does not natively support Beken chips yet, you must flash the LibreTiny image package using serial tools.

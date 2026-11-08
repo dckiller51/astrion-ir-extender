@@ -22,6 +22,9 @@ jobs:
             ext: "uf2" # LibreTiny generates a compiled image package in .uf2 format
           - suffix: "kc868-agv3"
             ext: "factory.bin" # ESP32-S3: full image (bootloader + partitions + app) for web.esphome.io
+            # The app alone, for updating over the air (web UI's "OTA Update"): a
+            # factory image sent there is not taken, the box keeps its old firmware.
+            ota: "ota.bin"
     steps:
       - uses: actions/checkout@v4
 
@@ -69,8 +72,24 @@ jobs:
           output_name="astrion-ir-extender-${{ matrix.suffix }}.${{ matrix.ext }}"
           cp "$bin_path" "$output_name"
 
-          # Pass filename output to the next steps
-          echo "bin_path=$output_name" >> "$GITHUB_OUTPUT"
+          files="$output_name"
+          if [ -n "${{ matrix.ota }}" ]; then
+            ota_path=$(find esphome/.esphome/build -name "firmware.${{ matrix.ota }}" | head -n 1)
+            if [ -z "$ota_path" ]; then
+              echo "::error::No firmware.${{ matrix.ota }} found under esphome/.esphome/build"
+              exit 1
+            fi
+            ota_name="astrion-ir-extender-${{ matrix.suffix }}.${{ matrix.ota }}"
+            cp "$ota_path" "$ota_name"
+            files="$files"$'\n'"$ota_name"
+          fi
+
+          # Pass the file names to the next steps
+          {
+            echo "bin_path<<EOF"
+            echo "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload Artifacts (Temporary)
         uses: actions/upload-artifact@v4
@@ -103,7 +122,7 @@ jobs:
             ### Installation / Flashing Instructions
 
             *   **ESP8285 Version (`.bin`)**: Can be flashed directly from your browser using Chrome or Edge via <https://web.esphome.io>.
-            *   **KinCony KC868-AGv3 (`.factory.bin`)**: Flash it from your browser using Chrome or Edge via <https://web.esphome.io>, over the box's USB-C port.
+            *   **KinCony KC868-AGv3**: first install, the **`.factory.bin`** from your browser using Chrome or Edge via <https://web.esphome.io>, over the box's USB-C port. Updates over Wi-Fi (the box's web page, "OTA Update"): the **`.ota.bin`** -- a `.factory.bin` sent there is not taken, the box keeps its old firmware.
             *   **BK7231N Version (`.uf2`)**: Must be flashed via a wired serial UART interface using **ltchiptool**. If your device is already running LibreTiny firmware, you can upload this `.uf2` file directly using the built-in OTA web interface update tool.
 
             Please refer to the [Quick install](https://github.com/${{ github.repository }}#flashing) section of the README for detailed instructions.
